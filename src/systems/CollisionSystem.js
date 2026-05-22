@@ -26,6 +26,8 @@ export class CollisionSystem {
     )
 
     for (const wall of this.walls) {
+      if (wall.userData.isOpen) continue
+
       const wallBox = this.getCollisionBox(wall)
 
       if (playerBox.intersectsBox(wallBox)) {

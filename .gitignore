@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Raw downloaded asset packs. Curated runtime assets live in public/assets.
+src/assets/Modular SciFi MegaKit\[Standard\]/
+src/assets/kit pack 3d/
+src/assets/floor-wood/
+src/assets/wall/
+src/assets/footsteps/
+src/assets/Planks021_2K-PNG/
+src/assets/SWAT.glb
+src/assets/Door.glb
+public/assets/audio/sounds props/

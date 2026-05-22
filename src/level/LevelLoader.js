@@ -2,11 +2,14 @@ import * as THREE from 'three'
 import { addWallDetails } from '../assets/VisualFactory'
 
 export class LevelLoader {
-  constructor(scene) {
+  constructor(scene, assetManager = null) {
     this.scene = scene
+    this.assetManager = assetManager
     this.walls = []
     this.objects = []
     this.soundSources = []
+    this.alarmZones = []
+    this.doors = []
 
     this.patrolPoints = []
     this.navigationPoints = []
@@ -106,12 +109,12 @@ export class LevelLoader {
 
   createFloor(width = 20, depth = 20) {
     const floorGeometry = new THREE.PlaneGeometry(width, depth)
-    const floorMaterial = new THREE.MeshStandardMaterial({
-      map: this.floorTexture,
-      color: 0xffffff,
-      roughness: 0.9,
-      metalness: 0.05,
-    })
+    const floorMaterial = this.assetManager?.createFloorMaterial() ?? new THREE.MeshStandardMaterial({
+        map: this.floorTexture,
+        color: 0xffffff,
+        roughness: 0.9,
+        metalness: 0.05,
+      })
 
     const floor = new THREE.Mesh(floorGeometry, floorMaterial)
     floor.rotation.x = -Math.PI / 2
@@ -125,19 +128,19 @@ export class LevelLoader {
 
   createWall(x, y, z, width, height, depth, color = 0xffffff) {
     const geometry = new THREE.BoxGeometry(width, height, depth)
-    const texture = this.wallTexture.clone()
-    texture.needsUpdate = true
-    texture.repeat.set(
-      Math.max(1, Math.round(Math.max(width, depth) / 2)),
-      1
-    )
+    const repeatX = Math.max(1, Math.round(Math.max(width, depth) / 2))
+    const material = this.assetManager?.createWallMaterial(repeatX) ?? (() => {
+      const texture = this.wallTexture.clone()
+      texture.needsUpdate = true
+      texture.repeat.set(repeatX, 1)
 
-    const material = new THREE.MeshStandardMaterial({
-      map: texture,
-      color,
-      roughness: 0.85,
-      metalness: 0.08,
-    })
+      return new THREE.MeshStandardMaterial({
+        map: texture,
+        color,
+        roughness: 0.85,
+        metalness: 0.08,
+      })
+    })()
 
     const wall = new THREE.Mesh(geometry, material)
     wall.position.set(x, y, z)
@@ -172,9 +175,54 @@ export class LevelLoader {
     return marker
   }
 
+  createAlarmPlate(x, z, width, depth) {
+    const plate = this.createMarker(x, z, width, depth, 0x4a1515, 0x6d0808)
+    plate.userData.alarmZone = true
+    this.alarmZones.push({ x, z, width, depth, plate })
+    return plate
+  }
+
+  createDoor(x, z, width, depth, rotation = 0) {
+    const door = this.createProp(x, z, width, 1.65, depth, 0x8a5a22, true)
+    door.rotation.y = rotation
+    door.userData.isDoor = true
+    door.userData.isOpen = false
+
+    if (Math.abs(Math.sin(rotation)) > 0.5) {
+      door.userData.collisionSize = new THREE.Vector3(depth, 1.65, width)
+    }
+
+    this.attachDoorModel(door, { x: width, y: 1.65, z: Math.max(depth, 0.36) }, rotation)
+
+    this.doors.push(door)
+    return door
+  }
+
+  attachDoorModel(door, targetSize, rotation) {
+    if (!this.assetManager) return
+
+    this.assetManager.createModel('/assets/models/doors/door.glb', targetSize)
+      .then((model) => {
+        if (!model) return
+
+        model.position.add(new THREE.Vector3(door.position.x, 0, door.position.z))
+        model.rotation.y += rotation
+        model.visible = !door.userData.isOpen
+        door.userData.visual = model
+        this.scene.add(model)
+        this.objects.push(model)
+        door.visible = false
+      })
+      .catch(() => {
+        door.visible = true
+      })
+  }
+
   createSoundObject(x, z, width, depth, color, label, emissive = 0x000000) {
     const object = this.createProp(x, z, width, 0.7, depth, color, true)
     const beacon = this.createMarker(x, z, width + 0.35, depth + 0.35, color, emissive)
+
+    this.attachSoundObjectModel(object, label, { x: width, y: 0.85, z: depth })
 
     this.soundSources.push({
       label,
@@ -184,6 +232,23 @@ export class LevelLoader {
     })
 
     return object
+  }
+
+  attachSoundObjectModel(object, label, targetSize) {
+    if (!this.assetManager) return
+
+    this.assetManager.createSoundObjectModel(label, targetSize)
+      .then((model) => {
+        if (!model) return
+
+        model.position.add(new THREE.Vector3(object.position.x, 0, object.position.z))
+        this.scene.add(model)
+        this.objects.push(model)
+        object.visible = false
+      })
+      .catch(() => {
+        object.visible = true
+      })
   }
 
   createProp(x, z, width, height, depth, color, collidable = false) {
@@ -233,6 +298,8 @@ export class LevelLoader {
     this.walls = []
     this.objects = []
     this.soundSources = []
+    this.alarmZones = []
+    this.doors = []
     this.patrolPoints = levelData.enemies?.[0]?.patrolPoints ?? []
     this.navigationPoints = levelData.navigationPoints ?? []
 
@@ -267,6 +334,25 @@ export class LevelLoader {
         soundObject.color,
         soundObject.label,
         soundObject.emissive
+      )
+    }
+
+    for (const alarmZone of levelData.alarmZones ?? []) {
+      this.createAlarmPlate(
+        alarmZone.x,
+        alarmZone.z,
+        alarmZone.width,
+        alarmZone.depth
+      )
+    }
+
+    for (const door of levelData.doors ?? []) {
+      this.createDoor(
+        door.x,
+        door.z,
+        door.width,
+        door.depth,
+        door.rotation ?? 0
       )
     }
 

@@ -17,7 +17,7 @@ export class Player {
     if (input.isKeyDown('a')) moveDirection.x -= 1
     if (input.isKeyDown('d')) moveDirection.x += 1
 
-    if (moveDirection.lengthSq() === 0) return
+    if (moveDirection.lengthSq() === 0) return false
 
     moveDirection.normalize()
 
@@ -45,5 +45,7 @@ export class Player {
       const targetRotation = Math.atan2(moveDirection.x, moveDirection.z)
       this.mesh.rotation.y = targetRotation
     }
+
+    return moved
   }
 }

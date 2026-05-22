@@ -15,6 +15,11 @@ import { HUD } from '../ui/HUD'
 import { Screens } from '../ui/Screens'
 import { Menu } from '../ui/Menu'
 import { getLevelById } from '../level/levels'
+import { AssetManager } from '../assets/AssetManager'
+import { AudioManager } from '../audio/AudioManager'
+import { PreviewGuidanceSystem } from '../systems/PreviewGuidanceSystem'
+import { AlarmSystem } from '../systems/AlarmSystem'
+import { DoorSystem } from '../systems/DoorSystem'
 
 export class Game {
   constructor() {
@@ -24,6 +29,8 @@ export class Game {
     this.scene = this.sceneManager.scene
     this.camera = this.sceneManager.camera
     this.renderer = this.sceneManager.renderer
+    this.assetManager = new AssetManager(this.renderer)
+    this.audioManager = new AudioManager(this.camera)
 
     this.screens = new Screens(
       () => this.startNewGame(),
@@ -49,6 +56,9 @@ export class Game {
   }
 
   startNewGame() {
+    this.audioManager.resume()
+    this.audioManager.stopAlarm()
+
     if (this.worldInitialized) {
       this.clearWorld()
     }
@@ -69,8 +79,13 @@ export class Game {
   }
 
   setupWorld() {
-    this.levelLoader = new LevelLoader(this.scene)
+    this.levelLoader = new LevelLoader(this.scene, this.assetManager)
     this.levelLoader.loadLevel(this.currentLevel)
+    this.audioManager.attachSoundSources(this.levelLoader.soundSources)
+    this.previewGuidanceSystem = new PreviewGuidanceSystem(
+      this.scene,
+      this.levelLoader.soundSources
+    )
 
     this.collisionSystem = new CollisionSystem(this.levelLoader.walls)
     this.detectionSystem = new DetectionSystem(this.levelLoader.walls)
@@ -80,6 +95,8 @@ export class Game {
     )
     this.objectiveSystem = new ObjectiveSystem(this.currentLevel.objective)
     this.exitSystem = new ExitSystem()
+    this.alarmSystem = new AlarmSystem(this.levelLoader.alarmZones)
+    this.doorSystem = new DoorSystem(this.levelLoader.doors, this.audioManager)
 
     this.player = new Player()
     this.scene.add(this.player.mesh)
@@ -87,6 +104,8 @@ export class Game {
     const enemyData = this.currentLevel.enemies?.[0] ?? { x: 0, z: 0, patrolPoints: [] }
     this.enemy = new Enemy(enemyData.x, enemyData.z, enemyData.patrolPoints)
     this.scene.add(this.enemy.mesh)
+    this.attachEnemyModel()
+    this.audioManager.attachGuard(this.enemy.mesh)
 
     this.objective = new Objective(this.currentLevel.objective.x, this.currentLevel.objective.z)
     this.scene.add(this.objective.mesh)
@@ -115,6 +134,10 @@ export class Game {
   }
 
   clearWorld() {
+    this.audioManager.detachSoundSources()
+    this.previewGuidanceSystem?.destroy()
+    this.previewGuidanceSystem = null
+
     if (this.player) this.scene.remove(this.player.mesh)
     if (this.enemy) this.scene.remove(this.enemy.mesh)
     if (this.objective && !this.objective.isCollected) {
@@ -151,6 +174,22 @@ export class Game {
     )
   }
 
+  attachEnemyModel() {
+    this.assetManager.createModel('/assets/models/characters/swat.glb', {
+      x: 0.9,
+      y: 1.4,
+      z: 0.9,
+    }).then((model) => {
+      this.enemy.mesh.add(model)
+
+      for (const child of this.enemy.mesh.children) {
+        if (child !== model && child.visible !== undefined) {
+          child.visible = false
+        }
+      }
+    }).catch(() => {})
+  }
+
   setupCamera() {
     this.camera.fov = 55
     this.camera.updateProjectionMatrix()
@@ -177,6 +216,8 @@ export class Game {
     this.input.clearJustPressed()
     this.setupPreviewCamera()
     this.sceneManager.setPreviewLighting()
+    this.audioManager.stopSoundSources()
+    this.previewGuidanceSystem?.show()
   }
 
   startDarkPhase() {
@@ -185,11 +226,15 @@ export class Game {
     this.input.clearJustPressed()
     this.setupCamera()
     this.sceneManager.setDarkLighting()
+    this.previewGuidanceSystem?.hide()
+    this.audioManager.startSoundSources()
   }
 
   endGame(state, reason) {
     this.gameState = state
     this.sceneManager.setPreviewLighting()
+    this.audioManager.stopSoundSources()
+    this.previewGuidanceSystem?.hide()
     this.previewCameraTarget = {
       x: this.player.mesh.position.x,
       z: this.player.mesh.position.z,
@@ -232,6 +277,18 @@ export class Game {
   updateDetection() {
     const detected = this.detectionSystem.canDetectPlayer(this.enemy, this.player)
     this.enemy.updateDetection(detected)
+  }
+
+  updateAlarm() {
+    const alarmZone = this.alarmSystem.update(this.player)
+
+    if (!alarmZone) return
+
+    this.audioManager.playAlarm()
+    this.endGame(
+      GameState.GAME_OVER,
+      'Вы наступили на плиту сигнализации. В доме поднята тревога.'
+    )
   }
 
   updateGameOver() {
@@ -292,6 +349,7 @@ export class Game {
 
   updatePreview(deltaTime) {
     this.updatePreviewCamera(deltaTime)
+    this.previewGuidanceSystem?.update(this.previewCameraTarget, deltaTime)
     this.previewTimeLeft -= deltaTime
 
     if (this.previewTimeLeft <= 0) {
@@ -328,10 +386,13 @@ export class Game {
     }
 
     this.darkPhaseElapsed += deltaTime
-    this.player.update(this.input, this.collisionSystem)
+    const playerMoved = this.player.update(this.input, this.collisionSystem)
+    this.audioManager.update(deltaTime, playerMoved)
     this.updateSurrender()
+    this.doorSystem.update(this.player, this.input)
     this.updateObjective()
     this.updateExit()
+    this.updateAlarm()
     this.updateDetection()
     this.enemy.update(this.collisionSystem, this.player, this.navigationSystem)
     this.updateGameOver()

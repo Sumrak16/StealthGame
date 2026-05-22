@@ -14,6 +14,7 @@ import { ExitSystem } from '../systems/ExitSystem'
 import { HUD } from '../ui/HUD'
 import { Screens } from '../ui/Screens'
 import { Menu } from '../ui/Menu'
+import { getLevelById } from '../level/levels'
 
 export class Game {
   constructor() {
@@ -36,6 +37,13 @@ export class Game {
     this.previewTimeLeft = this.previewDuration
     this.previewCameraTarget = { x: 0, z: 0 }
     this.previewCameraSpeed = 8
+    this.previewCameraBounds = {
+      minX: -9.5,
+      maxX: 9.5,
+      minZ: -9.5,
+      maxZ: 9.5,
+    }
+    this.currentLevel = getLevelById()
     this.darkPhaseElapsed = 0
     this.lastFrameTime = performance.now()
   }
@@ -62,7 +70,7 @@ export class Game {
 
   setupWorld() {
     this.levelLoader = new LevelLoader(this.scene)
-    this.levelLoader.loadTestLevel()
+    this.levelLoader.loadLevel(this.currentLevel)
 
     this.collisionSystem = new CollisionSystem(this.levelLoader.walls)
     this.detectionSystem = new DetectionSystem(this.levelLoader.walls)
@@ -76,13 +84,19 @@ export class Game {
     this.player = new Player()
     this.scene.add(this.player.mesh)
 
-    this.enemy = new Enemy(4.5, 2.5, this.levelLoader.patrolPoints)
+    const enemyData = this.currentLevel.enemies?.[0] ?? { x: 0, z: 0, patrolPoints: [] }
+    this.enemy = new Enemy(enemyData.x, enemyData.z, enemyData.patrolPoints)
     this.scene.add(this.enemy.mesh)
 
-    this.objective = new Objective(7.6, -7.6)
+    this.objective = new Objective(this.currentLevel.objective.x, this.currentLevel.objective.z)
     this.scene.add(this.objective.mesh)
 
-    this.exitZone = new ExitZone(-9, 8.4)
+    this.exitZone = new ExitZone(
+      this.currentLevel.exit.x,
+      this.currentLevel.exit.z,
+      this.currentLevel.exit.width,
+      this.currentLevel.exit.depth
+    )
     this.scene.add(this.exitZone.mesh)
 
     this.hasObjective = false
@@ -130,7 +144,11 @@ export class Game {
   }
 
   setupPlayer() {
-    this.player.mesh.position.set(-9.2, 0.5, 8.4)
+    this.player.mesh.position.set(
+      this.currentLevel.playerStart.x,
+      0.5,
+      this.currentLevel.playerStart.z
+    )
   }
 
   setupCamera() {
@@ -153,7 +171,8 @@ export class Game {
 
   startPreviewPhase() {
     this.previewTimeLeft = this.previewDuration
-    this.previewCameraTarget = { x: 0, z: 0 }
+    this.previewCameraTarget = { ...this.currentLevel.previewCameraTarget }
+    this.previewCameraBounds = { ...this.currentLevel.previewCameraBounds }
     this.gameState = GameState.PREVIEW
     this.input.clearJustPressed()
     this.setupPreviewCamera()
@@ -263,8 +282,14 @@ export class Game {
 
       this.previewCameraTarget.x += moveX * this.previewCameraSpeed * deltaTime
       this.previewCameraTarget.z += moveZ * this.previewCameraSpeed * deltaTime
-      this.previewCameraTarget.x = Math.max(-9.5, Math.min(9.5, this.previewCameraTarget.x))
-      this.previewCameraTarget.z = Math.max(-9.5, Math.min(9.5, this.previewCameraTarget.z))
+      this.previewCameraTarget.x = Math.max(
+        this.previewCameraBounds.minX,
+        Math.min(this.previewCameraBounds.maxX, this.previewCameraTarget.x)
+      )
+      this.previewCameraTarget.z = Math.max(
+        this.previewCameraBounds.minZ,
+        Math.min(this.previewCameraBounds.maxZ, this.previewCameraTarget.z)
+      )
     }
 
     this.setupPreviewCamera()

@@ -10,6 +10,7 @@ export class LevelLoader {
 
     this.patrolPoints = []
     this.navigationPoints = []
+    this.currentLevel = null
 
     this.floorTexture = this.createFloorTexture()
     this.wallTexture = this.createWallTexture()
@@ -227,71 +228,57 @@ export class LevelLoader {
     return this.createProp(x, z, 0.75, 1.8, 0.75, 0x7b838d, true)
   }
 
-  loadTestLevel() {
-    this.createFloor(30, 26)
+  loadLevel(levelData) {
+    this.currentLevel = levelData
+    this.walls = []
+    this.objects = []
+    this.soundSources = []
+    this.patrolPoints = levelData.enemies?.[0]?.patrolPoints ?? []
+    this.navigationPoints = levelData.navigationPoints ?? []
 
-    this.createWall(0, 1, -10, 24, 2, 1)
-    this.createWall(0, 1, 10, 24, 2, 1)
-    this.createWall(-12, 1, 0, 1, 2, 20)
-    this.createWall(12, 1, 0, 1, 2, 20)
+    this.createFloor(levelData.floor?.width, levelData.floor?.depth)
 
-    this.createWall(-6, 1, 4.8, 12, 2, 1)
-    this.createWall(7.6, 1, 4.8, 4.8, 2, 1)
-    this.createWall(-6, 1, 0.2, 1, 2, 8.2)
-    this.createWall(-1.8, 1, 0.2, 1, 2, 8.2)
+    for (const wall of levelData.walls ?? []) {
+      this.createWall(
+        wall.x,
+        wall.y,
+        wall.z,
+        wall.width,
+        wall.height,
+        wall.depth,
+        wall.color
+      )
+    }
 
-    this.createWall(2.8, 1, 0.6, 1, 2, 7.6)
-    this.createWall(8.8, 1, 0.6, 1, 2, 7.6)
-    this.createWall(3.4, 1, -3.8, 2.2, 2, 1)
-    this.createWall(8.0, 1, -3.8, 2.4, 2, 1)
+    for (const desk of levelData.desks ?? []) {
+      this.createBankDesk(desk.x, desk.z, desk.width, desk.rotation ?? 0)
+    }
 
-    this.createWall(2.4, 1, -7.4, 1, 2, 4.2)
-    this.createWall(9.2, 1, -7.4, 1, 2, 4.2)
-    this.createWall(5.8, 1, -9, 6.8, 2, 1)
+    for (const column of levelData.columns ?? []) {
+      this.createColumn(column.x, column.z)
+    }
 
-    this.createBankDesk(-9.3, 7.2, 3.2)
-    this.createBankDesk(-5.4, 7.2, 3.2)
-    this.createBankDesk(-1.5, 7.2, 3.2)
-    this.createBankDesk(5.7, 7.2, 3.6)
+    for (const soundObject of levelData.soundObjects ?? []) {
+      this.createSoundObject(
+        soundObject.x,
+        soundObject.z,
+        soundObject.width,
+        soundObject.depth,
+        soundObject.color,
+        soundObject.label,
+        soundObject.emissive
+      )
+    }
 
-    this.createColumn(-9.6, 2.2)
-    this.createColumn(-9.6, -5.8)
-    this.createColumn(0.3, -2.4)
-    this.createColumn(10.1, 2.3)
-
-    this.createSoundObject(-9.4, -6.8, 1.2, 1.2, 0x334b5f, 'atm', 0x0a4158)
-    this.createSoundObject(-3.8, 6.2, 1.2, 0.8, 0x26323d, 'teller-terminal', 0x0d5361)
-    this.createSoundObject(0.6, -2.4, 1.1, 1.1, 0x45505c, 'server-rack', 0x0d425c)
-    this.createSoundObject(10, 2.1, 1.1, 1.1, 0x263a45, 'camera-console', 0x0d5361)
-    this.createSoundObject(5.8, -7.5, 1.8, 1.2, 0x303842, 'vault-safe', 0x17324d)
-
-    this.createMarker(-9, 8.4, 1.9, 1.9, 0x1d3b34, 0x0d4f35)
-    this.createMarker(7.6, -7.6, 1.4, 1.4, 0x24394a, 0x004d66)
-    this.createMarker(-3.9, 4.8, 2.1, 0.12, 0x78d7ff, 0x1d5366)
-    this.createMarker(5.8, -3.8, 2.1, 0.12, 0x78d7ff, 0x1d5366)
-
-    this.patrolPoints = [
-      { x: 5.8, z: 3 },
-      { x: 5.8, z: 0 },
-      { x: 5.8, z: -2.6 },
-      { x: 9.8, z: -2.6 },
-      { x: 9.8, z: 2.8 },
-    ]
-
-    this.navigationPoints = [
-      { x: -9, z: 8.4 },
-      { x: -9, z: 3 },
-      { x: -9, z: -6.8 },
-      { x: -3.9, z: 3 },
-      { x: -3.9, z: -6.8 },
-      { x: 0.6, z: 3 },
-      { x: 0.6, z: -2.4 },
-      { x: 5.8, z: 3 },
-      { x: 5.8, z: -2.6 },
-      { x: 5.8, z: -7.5 },
-      { x: 9.8, z: 2.8 },
-      { x: 9.8, z: -2.6 },
-      { x: 7.6, z: -7.6 },
-    ]
+    for (const marker of levelData.markers ?? []) {
+      this.createMarker(
+        marker.x,
+        marker.z,
+        marker.width,
+        marker.depth,
+        marker.color,
+        marker.emissive
+      )
+    }
   }
 }

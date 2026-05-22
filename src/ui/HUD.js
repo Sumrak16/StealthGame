@@ -106,9 +106,9 @@ export class HUD {
     this.root.appendChild(this.timerPanel)
   }
 
-  update(hasObjective = false, gameState = GameState.PLAYING, previewTimeLeft = 0) {
+  update(missionText = null, gameState = GameState.PLAYING, previewTimeLeft = 0) {
     this.updateEnemyIndicator(gameState)
-    this.updateMissionText(hasObjective, gameState)
+    this.updateMissionText(missionText, gameState)
     this.updateTimer(gameState, previewTimeLeft)
   }
 
@@ -167,22 +167,10 @@ export class HUD {
     this.timerValue.style.fontSize = '30px'
   }
 
-  updateMissionText(hasObjective, gameState) {
-    if (gameState === GameState.PREVIEW) {
-      this.objectiveText.textContent = 'Запомните планировку банка'
-      this.statusText.textContent = 'WASD двигает камеру осмотра. Через 15 секунд свет погаснет.'
-      return
-    }
-
-    if (gameState === GameState.VICTORY) {
-      this.objectiveText.textContent = 'Побег выполнен'
-      this.statusText.textContent = 'Статус: задание завершено'
-      return
-    }
-
-    if (gameState === GameState.GAME_OVER) {
-      this.objectiveText.textContent = 'Задание провалено'
-      this.statusText.textContent = 'Статус: попытка завершена'
+  updateMissionText(missionText, gameState) {
+    if (missionText) {
+      this.objectiveText.textContent = missionText.title
+      this.statusText.textContent = missionText.status
       return
     }
 
@@ -192,13 +180,8 @@ export class HUD {
       return
     }
 
-    if (hasObjective) {
-      this.objectiveText.textContent = 'Доберитесь до выхода'
-      this.statusText.textContent = 'Документ получен. Избегайте охраны.'
-    } else {
-      this.objectiveText.textContent = 'Найдите секретный документ'
-      this.statusText.textContent = 'Документ не найден. Сначала выполните цель.'
-    }
+    this.objectiveText.textContent = 'Выполните цель уровня'
+    this.statusText.textContent = 'Следуйте условиям текущего задания.'
   }
 
   destroy() {

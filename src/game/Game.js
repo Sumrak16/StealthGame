@@ -78,7 +78,7 @@ export class Game {
       this.levelLoader.walls,
       this.levelLoader.navigationPoints
     )
-    this.objectiveSystem = new ObjectiveSystem()
+    this.objectiveSystem = new ObjectiveSystem(this.currentLevel.objective)
     this.exitSystem = new ExitSystem()
 
     this.player = new Player()
@@ -214,18 +214,13 @@ export class Game {
   }
 
   updateObjective() {
-    if (this.hasObjective) return
-
-    const canCollect = this.objectiveSystem.canCollect(this.player, this.objective)
-
-    if (canCollect) {
-      this.objective.collect(this.scene)
-      this.hasObjective = true
+    if (this.objectiveSystem.tryComplete(this.player, this.objective, this.scene)) {
+      this.hasObjective = this.objectiveSystem.isCompleted()
     }
   }
 
   updateExit() {
-    if (!this.hasObjective) return
+    if (!this.objectiveSystem.canUseExit()) return
 
     const atExit = this.exitSystem.isPlayerAtExit(this.player, this.exitZone)
 
@@ -304,7 +299,12 @@ export class Game {
       this.startDarkPhase()
     }
 
-    this.hud.update(this.hasObjective, this.gameState, this.previewTimeLeft)
+    this.updateHud()
+  }
+
+  updateHud() {
+    const missionText = this.objectiveSystem?.getMissionText(this.gameState)
+    this.hud.update(missionText, this.gameState, this.previewTimeLeft)
   }
 
   update() {
@@ -322,7 +322,7 @@ export class Game {
     }
 
     if (this.gameState !== GameState.PLAYING) {
-      this.hud.update(this.hasObjective, this.gameState, this.previewTimeLeft)
+      this.updateHud()
       this.updateRestart()
       return
     }
@@ -336,7 +336,7 @@ export class Game {
     this.enemy.update(this.collisionSystem, this.player, this.navigationSystem)
     this.updateGameOver()
     this.updateCamera()
-    this.hud.update(this.hasObjective, this.gameState, this.previewTimeLeft)
+    this.updateHud()
   }
 
   animate = () => {

@@ -183,16 +183,21 @@ export class LevelLoader {
   }
 
   createDoor(x, z, width, depth, rotation = 0) {
-    const door = this.createProp(x, z, width, 1.65, depth, 0x8a5a22, true)
+    const doorHeight = 2.05
+    const door = this.createProp(x, z, width, doorHeight, depth, 0x8a5a22, true)
     door.rotation.y = rotation
     door.userData.isDoor = true
     door.userData.isOpen = false
+    door.userData.openProgress = 0
+    door.userData.closedRotation = rotation
+    door.userData.openRotation = rotation - Math.PI / 2
+    door.userData.visualWidth = width
 
     if (Math.abs(Math.sin(rotation)) > 0.5) {
-      door.userData.collisionSize = new THREE.Vector3(depth, 1.65, width)
+      door.userData.collisionSize = new THREE.Vector3(depth, doorHeight, width)
     }
 
-    this.attachDoorModel(door, { x: width, y: 1.65, z: Math.max(depth, 0.36) }, rotation)
+    this.attachDoorModel(door, { x: width, y: doorHeight, z: Math.max(depth, 0.5) }, rotation)
 
     this.doors.push(door)
     return door
@@ -201,16 +206,29 @@ export class LevelLoader {
   attachDoorModel(door, targetSize, rotation) {
     if (!this.assetManager) return
 
-    this.assetManager.createModel('/assets/models/doors/door.glb', targetSize)
+    this.assetManager.createModel('/assets/models/doors/door.glb', targetSize, { uniform: false })
       .then((model) => {
         if (!model) return
 
-        model.position.add(new THREE.Vector3(door.position.x, 0, door.position.z))
-        model.rotation.y += rotation
-        model.visible = !door.userData.isOpen
-        door.userData.visual = model
-        this.scene.add(model)
-        this.objects.push(model)
+        const hingeOffset = new THREE.Vector3(-targetSize.x / 2, 0, 0)
+        hingeOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation)
+
+        const pivot = new THREE.Group()
+        pivot.position.set(
+          door.position.x + hingeOffset.x,
+          0,
+          door.position.z + hingeOffset.z
+        )
+        pivot.rotation.y = rotation
+
+        model.position.x += targetSize.x / 2
+        pivot.add(model)
+
+        door.userData.visual = pivot
+        door.userData.closedRotation = rotation
+        door.userData.openRotation = rotation - Math.PI / 2
+        this.scene.add(pivot)
+        this.objects.push(pivot)
         door.visible = false
       })
       .catch(() => {
@@ -219,10 +237,18 @@ export class LevelLoader {
   }
 
   createSoundObject(x, z, width, depth, color, label, emissive = 0x000000) {
-    const object = this.createProp(x, z, width, 0.7, depth, color, true)
-    const beacon = this.createMarker(x, z, width + 0.35, depth + 0.35, color, emissive)
+    const hiddenLabels = new Set(['front-door', 'creaky-floor'])
+    const isHidden = hiddenLabels.has(label)
+    const object = this.createProp(x, z, width, 0.7, depth, color, false)
+    const beacon = isHidden
+      ? null
+      : this.createMarker(x, z, width + 0.35, depth + 0.35, color, emissive)
 
-    this.attachSoundObjectModel(object, label, { x: width, y: 0.85, z: depth })
+    object.visible = false
+
+    if (!isHidden) {
+      this.attachSoundObjectModel(object, label, { x: width, y: 0.85, z: depth })
+    }
 
     this.soundSources.push({
       label,
@@ -241,14 +267,23 @@ export class LevelLoader {
       .then((model) => {
         if (!model) return
 
-        model.position.add(new THREE.Vector3(object.position.x, 0, object.position.z))
+        model.position.add(new THREE.Vector3(
+          object.position.x,
+          this.getSoundModelYOffset(label),
+          object.position.z
+        ))
         this.scene.add(model)
         this.objects.push(model)
         object.visible = false
       })
       .catch(() => {
-        object.visible = true
+        object.visible = false
       })
+  }
+
+  getSoundModelYOffset(label) {
+    if (label === 'clock' || label === 'twinkle') return 0.85
+    return 0
   }
 
   createProp(x, z, width, height, depth, color, collidable = false) {

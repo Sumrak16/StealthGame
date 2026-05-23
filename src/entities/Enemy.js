@@ -27,6 +27,8 @@ export class Enemy {
 
     this.canCurrentlySeePlayer = false
     this.currentIntermediateTarget = null
+    this.wasMoving = false
+    this.stuckTime = 0
   }
 
   update(collisionSystem, player, navigationSystem) {
@@ -74,8 +76,12 @@ export class Enemy {
 
     if (moved) {
       this.mesh.rotation.y = Math.atan2(direction.x, direction.z)
+      this.stuckTime = 0
+    } else {
+      this.stuckTime += 1
     }
 
+    this.wasMoving = moved
     return this.mesh.position.distanceTo(targetPosition) < 0.25
   }
 
@@ -106,7 +112,8 @@ export class Enemy {
 
     const reached = this.moveTowards(targetPosition, this.speed, collisionSystem)
 
-    if (reached) {
+    if (reached || this.stuckTime > 45) {
+      this.stuckTime = 0
       this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length
     }
   }

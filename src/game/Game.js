@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { SceneManager } from './SceneManager'
 import { Input } from './Input'
 import { GameState } from './GameState'
@@ -20,6 +21,8 @@ import { AudioManager } from '../audio/AudioManager'
 import { PreviewGuidanceSystem } from '../systems/PreviewGuidanceSystem'
 import { AlarmSystem } from '../systems/AlarmSystem'
 import { DoorSystem } from '../systems/DoorSystem'
+import { loadTiledLevel } from '../level/TiledLevelParser'
+import { CharacterVisualController } from '../entities/CharacterVisualController'
 
 export class Game {
   constructor() {
@@ -31,6 +34,8 @@ export class Game {
     this.renderer = this.sceneManager.renderer
     this.assetManager = new AssetManager(this.renderer)
     this.audioManager = new AudioManager(this.camera)
+    this.previewAudioTarget = new THREE.Object3D()
+    this.scene.add(this.previewAudioTarget)
 
     this.screens = new Screens(
       () => this.startNewGame(),
@@ -55,7 +60,16 @@ export class Game {
     this.lastFrameTime = performance.now()
   }
 
-  startNewGame() {
+  async loadCurrentLevel() {
+    try {
+      this.currentLevel = await loadTiledLevel('/levels/house-1.json')
+    } catch (error) {
+      console.warn('Tiled level was not loaded, using fallback level.', error)
+      this.currentLevel = getLevelById()
+    }
+  }
+
+  async startNewGame() {
     this.audioManager.resume()
     this.audioManager.stopAlarm()
 
@@ -63,6 +77,7 @@ export class Game {
       this.clearWorld()
     }
 
+    await this.loadCurrentLevel()
     this.setupWorld()
     this.startPreviewPhase()
     this.screens.hide()
@@ -100,6 +115,8 @@ export class Game {
 
     this.player = new Player()
     this.scene.add(this.player.mesh)
+    this.audioManager.attachListener(this.player.mesh)
+    this.attachPlayerModel()
 
     const enemyData = this.currentLevel.enemies?.[0] ?? { x: 0, z: 0, patrolPoints: [] }
     this.enemy = new Enemy(enemyData.x, enemyData.z, enemyData.patrolPoints)
@@ -137,6 +154,8 @@ export class Game {
     this.audioManager.detachSoundSources()
     this.previewGuidanceSystem?.destroy()
     this.previewGuidanceSystem = null
+    this.playerVisualController = null
+    this.enemyVisualController = null
 
     if (this.player) this.scene.remove(this.player.mesh)
     if (this.enemy) this.scene.remove(this.enemy.mesh)
@@ -175,11 +194,13 @@ export class Game {
   }
 
   attachEnemyModel() {
-    this.assetManager.createModel('/assets/models/characters/swat.glb', {
+    this.assetManager.createAnimatedModel('/assets/models/characters/swat.glb', {
       x: 0.9,
       y: 1.4,
       z: 0.9,
-    }).then((model) => {
+    }, { floorOffset: -0.5 }).then(({ model, animations }) => {
+      if (!this.isRenderableModel(model)) return
+
       this.enemy.mesh.add(model)
 
       for (const child of this.enemy.mesh.children) {
@@ -187,7 +208,48 @@ export class Game {
           child.visible = false
         }
       }
-    }).catch(() => {})
+
+      this.enemyVisualController = new CharacterVisualController(
+        this.enemy.mesh,
+        model,
+        animations
+      )
+    }).catch((error) => {
+      console.warn('Enemy model was not loaded.', error)
+    })
+  }
+
+  attachPlayerModel() {
+    this.assetManager.createAnimatedModel('/assets/models/characters/person.glb', {
+      x: 0.85,
+      y: 1.35,
+      z: 0.85,
+    }, { floorOffset: -0.5 }).then(({ model, animations }) => {
+      if (!this.isRenderableModel(model)) return
+
+      this.player.mesh.add(model)
+
+      for (const child of this.player.mesh.children) {
+        if (child !== model && child.visible !== undefined) {
+          child.visible = false
+        }
+      }
+
+      this.playerVisualController = new CharacterVisualController(
+        this.player.mesh,
+        model,
+        animations
+      )
+    }).catch((error) => {
+      console.warn('Player model was not loaded.', error)
+    })
+  }
+
+  isRenderableModel(model) {
+    const box = new THREE.Box3().setFromObject(model)
+    const size = box.getSize(new THREE.Vector3())
+    return Number.isFinite(size.x) && Number.isFinite(size.y) && Number.isFinite(size.z) &&
+      size.x > 0.01 && size.y > 0.01 && size.z > 0.01
   }
 
   setupCamera() {
@@ -215,8 +277,14 @@ export class Game {
     this.gameState = GameState.PREVIEW
     this.input.clearJustPressed()
     this.setupPreviewCamera()
+    this.previewAudioTarget.position.set(
+      this.previewCameraTarget.x,
+      0.5,
+      this.previewCameraTarget.z
+    )
+    this.audioManager.attachListener(this.previewAudioTarget)
     this.sceneManager.setPreviewLighting()
-    this.audioManager.stopSoundSources()
+    this.audioManager.startSoundSources()
     this.previewGuidanceSystem?.show()
   }
 
@@ -225,6 +293,7 @@ export class Game {
     this.darkPhaseElapsed = 0
     this.input.clearJustPressed()
     this.setupCamera()
+    this.audioManager.attachListener(this.player.mesh)
     this.sceneManager.setDarkLighting()
     this.previewGuidanceSystem?.hide()
     this.audioManager.startSoundSources()
@@ -240,6 +309,12 @@ export class Game {
       z: this.player.mesh.position.z,
     }
     this.setupPreviewCamera()
+    this.previewAudioTarget.position.set(
+      this.previewCameraTarget.x,
+      0.5,
+      this.previewCameraTarget.z
+    )
+    this.audioManager.attachListener(this.previewAudioTarget)
 
     if (state === GameState.VICTORY) {
       this.screens.showVictory()
@@ -345,11 +420,18 @@ export class Game {
     }
 
     this.setupPreviewCamera()
+    this.previewAudioTarget.position.set(
+      this.previewCameraTarget.x,
+      0.5,
+      this.previewCameraTarget.z
+    )
   }
 
   updatePreview(deltaTime) {
     this.updatePreviewCamera(deltaTime)
     this.previewGuidanceSystem?.update(this.previewCameraTarget, deltaTime)
+    this.enemy.update(this.collisionSystem, this.player, this.navigationSystem)
+    this.enemyVisualController?.update(deltaTime, this.enemy.wasMoving)
     this.previewTimeLeft -= deltaTime
 
     if (this.previewTimeLeft <= 0) {
@@ -388,13 +470,15 @@ export class Game {
     this.darkPhaseElapsed += deltaTime
     const playerMoved = this.player.update(this.input, this.collisionSystem)
     this.audioManager.update(deltaTime, playerMoved)
+    this.playerVisualController?.update(deltaTime, playerMoved)
     this.updateSurrender()
-    this.doorSystem.update(this.player, this.input)
+    this.doorSystem.update(this.player, this.input, deltaTime)
     this.updateObjective()
     this.updateExit()
     this.updateAlarm()
     this.updateDetection()
     this.enemy.update(this.collisionSystem, this.player, this.navigationSystem)
+    this.enemyVisualController?.update(deltaTime, this.enemy.wasMoving)
     this.updateGameOver()
     this.updateCamera()
     this.updateHud()

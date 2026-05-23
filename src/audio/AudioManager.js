@@ -8,12 +8,13 @@ const FOOTSTEP_URLS = [
 ]
 
 const SOUND_PROFILES = {
-  clock: { url: '/assets/audio/ambience/clock.wav', frequency: 420, interval: 1, volume: 0.18, refDistance: 2.4, maxDistance: 12 },
-  aquarium: { url: '/assets/audio/ambience/aquarium.ogg', frequency: 180, interval: 1.5, volume: 0.24, refDistance: 2.5, maxDistance: 12 },
-  parrot: { url: '/assets/audio/ambience/parrot.ogg', frequency: 560, interval: 1.9, volume: 0.26, refDistance: 2.5, maxDistance: 12 },
-  camera: { url: '/assets/audio/ambience/camera.ogg', frequency: 780, interval: 1.2, volume: 0.18, refDistance: 2.2, maxDistance: 11 },
-  'creaky-floor': { url: '/assets/audio/ambience/creaky-floor.ogg', frequency: 260, interval: 2.3, volume: 0.22, refDistance: 2.3, maxDistance: 11 },
-  'front-door': { url: '/assets/audio/ambience/front-door.ogg', frequency: 260, interval: 3, volume: 0.14, refDistance: 2, maxDistance: 9 },
+  clock: { url: '/assets/audio/ambience/clock.wav', frequency: 420, interval: 1, volume: 0.16, refDistance: 0.8, maxDistance: 5.5 },
+  twinkle: { url: '/assets/audio/ambience/clock.wav', frequency: 420, interval: 1, volume: 0.12, refDistance: 0.8, maxDistance: 5.5 },
+  aquarium: { url: '/assets/audio/ambience/aquarium.ogg', frequency: 180, interval: 1.5, volume: 0.22, refDistance: 0.9, maxDistance: 5.5 },
+  parrot: { url: '/assets/audio/ambience/parrot.ogg', frequency: 560, interval: 1.9, volume: 0.24, refDistance: 0.9, maxDistance: 5 },
+  camera: { url: '/assets/audio/ambience/camera.ogg', frequency: 780, interval: 1.2, volume: 0.16, refDistance: 0.8, maxDistance: 5 },
+  'creaky-floor': { url: '/assets/audio/ambience/creaky-floor.ogg', frequency: 260, interval: 2.3, volume: 0.2, refDistance: 0.85, maxDistance: 5 },
+  'front-door': { ambient: false },
 }
 
 export class AudioManager {
@@ -37,6 +38,10 @@ export class AudioManager {
     this.loadDoor()
   }
 
+  attachListener(target) {
+    target.add(this.listener)
+  }
+
   async resume() {
     const context = this.listener.context
     if (context.state !== 'running') {
@@ -58,14 +63,15 @@ export class AudioManager {
 
     for (const soundSource of soundSources) {
       const profile = SOUND_PROFILES[soundSource.label]
-      if (!profile) continue
+      if (!profile || profile.ambient === false) continue
 
       const audio = new THREE.PositionalAudio(this.listener)
       audio.setLoop(true)
       audio.setVolume(profile.volume)
       audio.setRefDistance(profile.refDistance)
       audio.setMaxDistance(profile.maxDistance)
-      audio.setRolloffFactor(2)
+      audio.setRolloffFactor(3)
+      audio.panner.distanceModel = 'linear'
       soundSource.object.add(audio)
 
       this.sources.push(audio)
